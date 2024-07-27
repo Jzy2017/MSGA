@@ -28,7 +28,7 @@ Download the pre-trained model and put it in 3_ImageFusion_Pytorch/snapshot
 ## Requirements
 
 ```
-Pytorch==1.12.1 Tensorflow==2.10.1
+Pytorch==1.12.1
 ```
 
 ## Test
