@@ -62,7 +62,7 @@ python test.py
 cd ../3_ImageFusion_Pytorch
 python test.py
 ```
-## Training
+## Train
 ### Step 1: Generate aligned images
 ```
 cd 1_ImageAlignment_Pytorch
