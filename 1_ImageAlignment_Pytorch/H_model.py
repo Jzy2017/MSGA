@@ -8,11 +8,9 @@ import torch.nn as nn
 from attention import Attention1D
 from position import PositionEmbeddingSine
 
-
 class feature_extractor(torch.nn.Module):
     def __init__(self):
         super().__init__()
-        # self.resize=Resize((128,128))
         self.batch_norm1 = nn.BatchNorm2d(64)
         self.batch_norm2 = nn.BatchNorm2d(64)
         self.batch_norm3 = nn.BatchNorm2d(64)
@@ -24,7 +22,6 @@ class feature_extractor(torch.nn.Module):
                                         nn.BatchNorm2d(64),
                                         nn.ReLU(True)
                                         )
-        # self.feature.append(conv1)
         self.maxpool1 = torch.nn.MaxPool2d((2,2), stride=2)
         self.conv2=torch.nn.Sequential( nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, padding=1),
                                         nn.BatchNorm2d(64),
@@ -46,10 +43,7 @@ class feature_extractor(torch.nn.Module):
                                         nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, padding=1),
                                         nn.BatchNorm2d(128),
                                         nn.ReLU(True))
-
-        # end
     def forward(self, input):
-        # input=self.resize(input)
         conv1 = self.conv1(input)
         conv1m = self.maxpool1(conv1)
         conv2 = self.conv2(conv1m)
@@ -124,6 +118,7 @@ class RegressionNet(torch.nn.Module):
         self.vertical_pad=nn.ConstantPad2d(value = 0,padding = [0, 0, search_range, search_range])
         self.horizontal_pad=nn.ConstantPad2d(value = 0,padding = [search_range, search_range, 0, 0])
         self.lrelu=nn.LeakyReLU(inplace = True)
+
         self.conv1 =torch.nn.Sequential( nn.Conv2d(in_channels = ((2*self.search_range)+1)*2, out_channels=self.out[0], kernel_size=3, stride=self.stride[0],padding=1),
                                         nn.BatchNorm2d(self.out[0]),
                                         nn.ReLU(True))
@@ -173,7 +168,6 @@ class H_estimator(torch.nn.Module):
         self.device=device
         self.feature_ir =  feature_extractor()#.cuda()
         self.feature_vis = feature_extractor()#.cuda()
-        # self.DLT=tensor_DLT(batch_size).to(self.device)
         self.Rnet1 = RegressionNet(is_training, 16, warped=False)#.cuda()
         self.Rnet2 = RegressionNet(is_training, 8, warped=True)#.cuda()
         self.Rnet3 = RegressionNet(is_training, 4, warped=True)#.cuda()
@@ -189,11 +183,10 @@ class H_estimator(torch.nn.Module):
         self.M_tile_inv_128, self.M_tile_128 = self.to_transform_H(128, batch_size)
         self.M_tile_inv_32, self.M_tile_32 = self.to_transform_H(32, batch_size)
         self.M_tile_inv_64, self.M_tile_64 = self.to_transform_H(64, batch_size)
-
         self.transform32  = Transform(32, 32,self.device,batch_size).to(self.device)
         self.transform64  = Transform(64, 64,self.device,batch_size).to(self.device)
         self.transform128 = Transform(128,128,self.device,batch_size).to(self.device)
-        
+
     def to_transform_H(self, patch_size, batch_size):            
         M = np.array([[patch_size / 2.0, 0., patch_size / 2.0],
                     [0., patch_size / 2.0, patch_size / 2.0],
@@ -210,7 +203,6 @@ class H_estimator(torch.nn.Module):
     def forward(self, inputs_ir_aug, inputs_ir, inputs_vis_aug, inputs_vis, gt=None,is_test=False,patch_size=128.):
         
         batch_size = inputs_ir.shape[0]
-        ############### build_model ###################################
         if is_test == True:
             ir_input1 = inputs_ir[...,0:3].permute(0,3,1,2)
             ir_input2 = inputs_ir[...,3:6].permute(0,3,1,2)
@@ -240,6 +232,7 @@ class H_estimator(torch.nn.Module):
         ##############################  Regression Net 1 ##############################
         ir_net1_f = self.Rnet1(ir_feature1[-1], ir_feature2[-1])
         ir_net1_f = torch.unsqueeze(ir_net1_f, 2)#*128
+        # H1 = self.DLT(net1_f/4., 32.)
         ir_H1 = solve_DLT(ir_net1_f/4., 32.)
         ir_H1 = torch.matmul(torch.matmul(self.M_tile_inv_32, ir_H1), self.M_tile_32)
         ir_feature2_warp = self.transform32(nn.functional.normalize(ir_feature2[-2], dim=1, p=2), ir_H1)
@@ -318,6 +311,49 @@ class H_estimator(torch.nn.Module):
         vis_warp2=torch.cat((vis_warp2_H1,vis_warp2_H2,vis_warp2_H3,vis_warp2_gt),1)
         vis_warp1=torch.cat((vis_warp1_H1,vis_warp1_H2,vis_warp1_H3,vis_warp1_gt),1)
         return ir_net1_f, ir_net2_f, ir_net3_f, ir_warp1, ir_warp2, vis_net1_f, vis_net2_f, vis_net3_f, vis_warp1, vis_warp2
+        # return net1_f, net1_f, net1_f, warp2_H1, warp2_H1, warp2_H1, one_warp_H1, one_warp_H1, one_warp_H1,warp2_gt, one_warp_gt
+
+class H_joint(torch.nn.Module):
+    def __init__(self, batch_size, device, is_training=1):
+        super().__init__()
+        self.device=device
+        self.keep_prob = 1.0
+        self.getoffset = torch.nn.Sequential(torch.nn.Linear(in_features = 16, out_features = 64),
+                                            # nn.ReLU(True),
+                                            torch.nn.Linear(in_features = 64, out_features = 8))
+        self.M_tile_inv_128, self.M_tile_128 = self.to_transform_H(128, batch_size)
+        self.transform128 = Transform(128,128,self.device,batch_size).to(self.device)
+
+
+    def to_transform_H(self, patch_size, batch_size):            
+        M = np.array([[patch_size / 2.0, 0., patch_size / 2.0],
+                    [0., patch_size / 2.0, patch_size / 2.0],
+                    [0., 0., 1.]]).astype(np.float32)
+        M_tensor = torch.from_numpy(M)
+        M_tile = torch.unsqueeze(M_tensor, 0).repeat( [batch_size, 1, 1])
+        M_inv = np.linalg.inv(M)
+        M_tensor_inv = torch.from_numpy(M_inv)
+        M_tile_inv = torch.unsqueeze(M_tensor_inv, 0).repeat([batch_size, 1, 1])
+        M_tile_inv=M_tile_inv.to(self.device)
+        M_tile=M_tile.to(self.device)
+        return M_tile_inv, M_tile
+        
+    def forward(self, offset1, offset2,irs,viss):
+
+        # fusion=torch.cat([offset1,offset2],2)
+        fusion=torch.cat([offset1,offset2],1)
+        fusion = fusion.contiguous().view(fusion.shape[0],-1)
+        offset_out = self.getoffset(fusion)
+        offset_out = torch.unsqueeze(offset_out, 2)#*128
+        H = solve_DLT(offset_out, 128)
+        H_mat = torch.matmul(torch.matmul(self.M_tile_inv_128, H), self.M_tile_128)
+        ir2 = irs[..., 3:6].permute(0,3,1,2)
+        vis2 = viss[..., 3:6].permute(0,3,1,2)
+        ir_warp2 = self.transform128(ir2, H_mat)
+        vis_warp2 = self.transform128(vis2, H_mat)
+        one = torch.ones_like(vis2)
+        one_warp = self.transform128(one, H_mat)
+        return offset_out,one_warp,ir_warp2,vis_warp2
 
 class H_joint_out(torch.nn.Module):
     def __init__(self, batch_size, device, is_training=1):
@@ -325,6 +361,7 @@ class H_joint_out(torch.nn.Module):
         self.device = device
         self.keep_prob = 1.0
         self.getoffset = torch.nn.Sequential(torch.nn.Linear(in_features = 16, out_features = 64),
+                                            # nn.ReLU(True),
                                             torch.nn.Linear(in_features = 64, out_features = 8))
         self.transform_output=Transform_output()
 
@@ -333,10 +370,12 @@ class H_joint_out(torch.nn.Module):
         fusion=torch.cat([offset1,offset2],1)
         fusion = fusion.contiguous().view(fusion.shape[0],-1)
         offset_out=self.getoffset(fusion)
-        offset_out = torch.unsqueeze(offset_out, 2)
+        offset_out = torch.unsqueeze(offset_out, 2)#*128
+
         size_tmp = torch.cat([size,size,size,size],axis=1)/128.
         resized_shift = torch.mul(offset_out, size_tmp)
         H_mat = output_solve_DLT(resized_shift, size)  
+
         warps_ir = self.transform_output(irs.permute(0,3,1,2), H_mat,size,resized_shift)
         warps_vis = self.transform_output(viss.permute(0,3,1,2), H_mat,size,resized_shift)
         return warps_ir, warps_vis
