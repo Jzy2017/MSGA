@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
+import time
 from context_block import ContextBlock
 def edge_extraction(gen_frames,use_cuda):
     
@@ -13,8 +14,6 @@ def edge_extraction(gen_frames,use_cuda):
     neg = -1 * pos
     filter_x = torch.cat([neg, pos], 0).unsqueeze(0)
     filter_y = torch.cat([neg, pos], 1).unsqueeze(0)
-    # print(neg.shape)
-
     strides = [1, 1, 1, 1]  # stride of (1, 1)
     padding = 'SAME'
     conv_x = nn.Conv2d(1,1,kernel_size=(2,1),stride=1,bias=False,padding=0)
@@ -43,7 +42,6 @@ def edge_extraction(gen_frames,use_cuda):
     # condense into one tensor and avg
     return edge_clip
 def seammask_extraction(mask,use_cuda):
-
     seam_mask = edge_extraction(torch.unsqueeze(torch.mean(mask, axis=1),1),use_cuda)
     filters = torch.from_numpy(np.array([[1.0,1.0,1.0],[1.0,1.0,1.0],[1.0,1.0,1.0]])).unsqueeze(0).unsqueeze(0).float()
     conv_1 = nn.Conv2d(1,1,kernel_size=3,stride=1,bias=False,padding=1)
@@ -54,10 +52,10 @@ def seammask_extraction(mask,use_cuda):
     conv_3.requires_grad = False
 
     if use_cuda:
-        conv_1=conv_1.cuda()
-        conv_2=conv_2.cuda()
-        conv_3=conv_3.cuda()
-        filters=filters.cuda()
+        conv_1 = conv_1.cuda()
+        conv_2 = conv_2.cuda()
+        conv_3 = conv_3.cuda()
+        filters = filters.cuda()
     conv_1.weight.data = filters
     conv_2.weight.data = filters
     conv_3.weight.data = filters
@@ -69,7 +67,6 @@ def seammask_extraction(mask,use_cuda):
     test_conv3 = torch.clamp(test_conv3, 0, 1)
     # condense into one tensor and avg
     return test_conv3
-
 class DoubleConv(nn.Module):
     """(convolution => [BN] => ReLU) * 2"""
 
@@ -89,7 +86,6 @@ class DoubleConv(nn.Module):
     def forward(self, x):
         return self.double_conv(x)
 
-
 class Down(nn.Module):
     """Downscaling with maxpool then double conv"""
 
@@ -102,6 +98,7 @@ class Down(nn.Module):
 
     def forward(self, x):
         return self.maxpool_conv(x)
+
 
 
 class Up(nn.Module):
@@ -134,9 +131,6 @@ class Up(nn.Module):
         # https://github.com/xiaopeng-liao/Pytorch-UNet/commit/8ebac70e633bac59fc22bb5195e513d5832fb3bd
         x = torch.cat([x2, x1], dim=1)
         return self.conv(x)
-
-
-
 class OutConv(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(OutConv, self).__init__()
@@ -145,7 +139,6 @@ class OutConv(nn.Module):
         self.tanh = nn.Tanh()
     def forward(self, x):
         return self.tanh(self.conv(x))
-
 
 class UNet(nn.Module):
     def __init__(self, n_channels, n_classes, bilinear=True):
@@ -184,42 +177,4 @@ class UNet(nn.Module):
         x = self.up3(x,  self.CB64(x1))#1, 64, 256, 384
         logits = self.outc(x)
         return logits
-class LocNet(torch.nn.Module):
-    def __init__(self):
-        super(LocNet, self).__init__()
-
-        ch = 9**2 *3 + 7**2 *3
-        self.layer1 = nn.Linear(ch, ch*2)
-        self.bn1 = nn.BatchNorm1d(ch*2)
-        self.layer2 = nn.Linear(ch*2, ch*2)
-        self.bn2 = nn.BatchNorm1d(ch*2)
-        self.layer3 = nn.Linear(ch*2, ch)
-        self.bn3 = nn.BatchNorm1d(ch)
-        self.layer4 = nn.Linear(ch, 6)
-
-        # Init weights
-        for m in self.modules():
-            classname = m.__class__.__name__
-            if classname.lower().find('conv') != -1:
-                # print(classname)
-                nn.init.kaiming_normal(m.weight)
-                nn.init.constant(m.bias, 0)
-            elif classname.find('bn') != -1:
-                m.weight.data.normal_(1.0, 0.02)
-                m.bias.data.fill_(0)
-
-    def forward(self, x):
-        x = self.layer1(x)
-        x = self.bn1(x)
-        x = F.relu(x)
-
-        x = self.layer2(x)
-        x = self.bn2(x)
-        x = F.relu(x)
-
-        x = self.layer3(x)
-        x = self.bn3(x)
-        x = F.relu(x)
-
-        x = self.layer4(x)
-        return x
+   
