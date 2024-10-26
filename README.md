@@ -4,6 +4,10 @@
 Zhiying Jiang, Zengxi Zhang, Jinyuan Liu, Xin Fan, Risheng Liu* ,**“Multi-Spectral Image Stitching via Global-Aware Quadrature Pyramid Regression”**, IEEE Transactions on Image Processing **(TIP)**, 2024. [*[paper]*](https://ieeexplore.ieee.org/document/10609325)
 ## Overview
 ![Abstract](figures/structure.png)
+## Updates
+
+[2024-08-01] The testing code is available   
+[2024-10-26] The training code in pytorch version is available
 
 ## Download
 
@@ -28,7 +32,7 @@ Download the pre-trained model and put it in 3_ImageFusion_Pytorch/snapshot
 ## Requirements
 
 ```
-Pytorch==1.12.1
+Pytorch==1.12.1 Tensorflow==2.10.1
 ```
 
 ## Test
@@ -53,10 +57,26 @@ cd ../2_ImageReconstruction_Tensorflow
 python test.py
 ```
 
-### Step 2: Fuse stitched images 
+### Step 3: Fuse stitched images 
 ```
 cd ../3_ImageFusion_Pytorch
 python test.py
+```
+## Training
+### Step 1: Generate aligned images
+```
+cd 1_ImageAlignment_Pytorch
+python train_H.py
+```
+### Step 2: Generate stitched images 
+```
+cd ../2_ImageReconstruction_Pytorch
+python train.py
+```
+### Step 3: Fuse stitched images 
+```
+cd ../3_ImageFusion_Pytorch
+python train.py
 ```
 ## Dataset (IVSD dataset)
   - [Google Drive](https://drive.google.com/file/d/1EFS0O-3KujvRJvcRx_Me5W2fdn9jRKGc/view?usp=sharing)
